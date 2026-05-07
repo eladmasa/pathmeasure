@@ -1,19 +1,32 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { Circle, CircleMarker, MapContainer, Polyline, TileLayer, useMap } from "react-leaflet";
+import { Fragment, useEffect, useRef } from "react";
+import L from "leaflet";
+import {
+  Circle,
+  CircleMarker,
+  MapContainer,
+  Marker,
+  Polyline,
+  TileLayer,
+  useMap,
+} from "react-leaflet";
 
-import type { AppStatus, TrackPoint } from "@/lib/types";
+import { getDistanceMeters } from "@/lib/distance";
+import type { AppStatus, MapStyle, SavedSegment, TrackPoint } from "@/lib/types";
 
 type MapViewProps = {
   center: [number, number];
   currentPoint: TrackPoint | null;
-  gpsAccuracy: number | null;
-  route: TrackPoint[];
+  currentRoute: TrackPoint[];
+  mapStyle: MapStyle;
+  savedSegments: SavedSegment[];
   straightDistanceMeters: number;
   status: AppStatus;
   totalDistanceMeters: number;
 };
+
+const SEGMENT_COLORS = ["#22d3ee", "#34d399", "#f59e0b", "#f472b6", "#a78bfa", "#fb7185"];
 
 function formatDistance(meters: number): string {
   if (meters >= 1000) {
@@ -23,11 +36,79 @@ function formatDistance(meters: number): string {
   return `${meters.toFixed(0)} m`;
 }
 
+function getSegmentLabelPoint(points: TrackPoint[]): [number, number] | null {
+  if (points.length === 0) {
+    return null;
+  }
+
+  if (points.length === 1) {
+    return [points[0].latitude, points[0].longitude];
+  }
+
+  let totalDistance = 0;
+
+  for (let index = 1; index < points.length; index += 1) {
+    totalDistance += getDistanceMeters(points[index - 1], points[index]);
+  }
+
+  if (totalDistance === 0) {
+    const midpoint = points[Math.floor(points.length / 2)];
+    return [midpoint.latitude, midpoint.longitude];
+  }
+
+  const halfwayDistance = totalDistance / 2;
+  let traversedDistance = 0;
+
+  for (let index = 1; index < points.length; index += 1) {
+    const start = points[index - 1];
+    const end = points[index];
+    const segmentDistance = getDistanceMeters(start, end);
+
+    if (traversedDistance + segmentDistance >= halfwayDistance) {
+      const remainingDistance = halfwayDistance - traversedDistance;
+      const ratio = segmentDistance === 0 ? 0 : remainingDistance / segmentDistance;
+      const latitude = start.latitude + (end.latitude - start.latitude) * ratio;
+      const longitude = start.longitude + (end.longitude - start.longitude) * ratio;
+
+      return [latitude, longitude];
+    }
+
+    traversedDistance += segmentDistance;
+  }
+
+  const lastPoint = points[points.length - 1];
+  return [lastPoint.latitude, lastPoint.longitude];
+}
+
+function createDistanceIcon(distanceMeters: number) {
+  return L.divIcon({
+    className: "",
+    html: `
+      <div style="
+        background: rgba(2, 6, 23, 0.82);
+        border: 1px solid rgba(255,255,255,0.18);
+        border-radius: 999px;
+        color: white;
+        font-size: 12px;
+        font-weight: 700;
+        padding: 6px 10px;
+        box-shadow: 0 10px 24px rgba(2, 6, 23, 0.28);
+        white-space: nowrap;
+        backdrop-filter: blur(8px);
+      ">
+        ${formatDistance(distanceMeters)}
+      </div>
+    `,
+    iconAnchor: [0, 0],
+  });
+}
+
 function MapController({
   currentPoint,
-  route,
+  currentRoute,
+  savedSegments,
   status,
-}: Pick<MapViewProps, "currentPoint" | "route" | "status">) {
+}: Pick<MapViewProps, "currentPoint" | "currentRoute" | "savedSegments" | "status">) {
   const map = useMap();
   const hasCenteredRef = useRef(false);
 
@@ -52,18 +133,22 @@ function MapController({
   }, [currentPoint, map, status]);
 
   useEffect(() => {
-    if (route.length < 2) {
+    const allPositions = [
+      ...savedSegments.flatMap((segment) =>
+        segment.points.map((point) => [point.latitude, point.longitude] as [number, number]),
+      ),
+      ...currentRoute.map((point) => [point.latitude, point.longitude] as [number, number]),
+    ];
+
+    if (allPositions.length < 2) {
       return;
     }
 
-    map.fitBounds(
-      route.map((point) => [point.latitude, point.longitude] as [number, number]),
-      {
-        padding: [48, 48],
-        maxZoom: 18,
-      },
-    );
-  }, [map, route]);
+    map.fitBounds(allPositions, {
+      padding: [48, 48],
+      maxZoom: 18,
+    });
+  }, [currentRoute, map, savedSegments]);
 
   return null;
 }
@@ -71,16 +156,20 @@ function MapController({
 export default function MapView({
   center,
   currentPoint,
-  gpsAccuracy,
-  route,
+  currentRoute,
+  mapStyle,
+  savedSegments,
   straightDistanceMeters,
   status,
   totalDistanceMeters,
 }: MapViewProps) {
-  const routePositions = route.map(
+  const currentRoutePositions = currentRoute.map(
     (point) => [point.latitude, point.longitude] as [number, number],
   );
-  const hasOverlayStats = route.length > 0 || gpsAccuracy !== null;
+  const hasOverlayStats =
+    status === "recording" || savedSegments.length > 0 || currentRoute.length > 0;
+  const waitingForGps =
+    status === "recording" && currentRoute.length === 0;
 
   return (
     <div className="h-full w-full">
@@ -90,12 +179,60 @@ export default function MapView({
         zoom={16}
         zoomControl={false}
       >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        {mapStyle === "street" ? (
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+        ) : (
+          <TileLayer
+            attribution='Tiles &copy; Esri'
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+          />
+        )}
+
+        <MapController
+          currentPoint={currentPoint}
+          currentRoute={currentRoute}
+          savedSegments={savedSegments}
+          status={status}
         />
 
-        <MapController currentPoint={currentPoint} route={route} status={status} />
+        {savedSegments.map((segment, index) => {
+          const positions = segment.points.map(
+            (point) => [point.latitude, point.longitude] as [number, number],
+          );
+          const color = SEGMENT_COLORS[index % SEGMENT_COLORS.length];
+          const labelPoint = getSegmentLabelPoint(segment.points);
+
+          if (positions.length < 2) {
+            return null;
+          }
+
+          return (
+            <Fragment key={segment.id}>
+              <Polyline
+                key={`${segment.id}-line`}
+                pathOptions={{
+                  color,
+                  lineCap: "round",
+                  lineJoin: "round",
+                  opacity: 0.9,
+                  weight: 5,
+                }}
+                positions={positions}
+              />
+              {labelPoint ? (
+                <Marker
+                  key={`${segment.id}-label`}
+                  icon={createDistanceIcon(segment.totalDistanceMeters)}
+                  interactive={false}
+                  position={labelPoint}
+                />
+              ) : null}
+            </Fragment>
+          );
+        })}
 
         {currentPoint ? (
           <>
@@ -122,7 +259,7 @@ export default function MapView({
           </>
         ) : null}
 
-        {routePositions.length > 1 ? (
+        {currentRoutePositions.length > 1 ? (
           <Polyline
             pathOptions={{
               color: "#0f172a",
@@ -131,11 +268,11 @@ export default function MapView({
               opacity: 0.95,
               weight: 8,
             }}
-            positions={routePositions}
+            positions={currentRoutePositions}
           />
         ) : null}
 
-        {routePositions.length > 1 ? (
+        {currentRoutePositions.length > 1 ? (
           <Polyline
             pathOptions={{
               color: "#22d3ee",
@@ -144,7 +281,7 @@ export default function MapView({
               opacity: 1,
               weight: 4,
             }}
-            positions={routePositions}
+            positions={currentRoutePositions}
           />
         ) : null}
       </MapContainer>
@@ -153,28 +290,20 @@ export default function MapView({
         <div className="pointer-events-none absolute inset-x-0 top-16 z-[450] flex justify-center px-4">
           <div className="grid w-full max-w-sm grid-cols-2 gap-2">
             <div className="rounded-2xl border border-white/15 bg-slate-950/78 px-3 py-2 text-white shadow-lg backdrop-blur">
-              <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-200">Walked</p>
-              <p className="mt-1 text-lg font-semibold">{formatDistance(totalDistanceMeters)}</p>
-            </div>
-            <div className="rounded-2xl border border-white/15 bg-slate-950/78 px-3 py-2 text-white shadow-lg backdrop-blur">
               <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-200">Straight</p>
               <p className="mt-1 text-lg font-semibold">
                 {formatDistance(straightDistanceMeters)}
               </p>
             </div>
             <div className="rounded-2xl border border-white/15 bg-slate-950/78 px-3 py-2 text-white shadow-lg backdrop-blur">
-              <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-200">Accuracy</p>
-              <p className="mt-1 text-lg font-semibold">
-                {gpsAccuracy === null ? "--" : `${gpsAccuracy.toFixed(0)} m`}
-              </p>
+              <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-200">Walked</p>
+              <p className="mt-1 text-lg font-semibold">{formatDistance(totalDistanceMeters)}</p>
             </div>
-            <div className="rounded-2xl border border-white/15 bg-slate-950/78 px-3 py-2 text-white shadow-lg backdrop-blur">
-              <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-200">Status</p>
-              <p className="mt-1 text-lg font-semibold">
-                {status[0].toUpperCase()}
-                {status.slice(1)}
-              </p>
-            </div>
+            {waitingForGps ? (
+              <div className="col-span-2 rounded-2xl border border-amber-300/20 bg-slate-950/78 px-3 py-2 text-center text-sm text-amber-100 shadow-lg backdrop-blur">
+                Waiting for GPS...
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}

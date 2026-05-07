@@ -10,3 +10,14 @@ export type TrackPoint = {
 };
 
 export type PanelMode = "compact" | "details" | "hidden";
+
+export type MapStyle = "street" | "satellite";
+
+export type SavedSegment = {
+  id: string;
+  label: string;
+  points: TrackPoint[];
+  totalDistanceMeters: number;
+  straightDistanceMeters: number;
+  lastAccuracy: number | null;
+};

@@ -1,25 +1,28 @@
 "use client";
 
-import type { AppStatus, GeoPermission } from "@/lib/types";
+import type {
+  AppStatus,
+  PanelMode,
+  SavedSegment,
+} from "@/lib/types";
 
-type PanelMode = "compact" | "details" | "hidden";
-
-type ControlPanelProps = {
-  errorMessage: string | null;
-  gpsAccuracy: number | null;
-  hasRoute: boolean;
-  permission: GeoPermission;
-  pointsRecorded: number;
-  signalMessage: string | null;
-  status: AppStatus;
+type SegmentStats = {
   straightDistanceMeters: number;
   totalDistanceMeters: number;
+};
+
+type ControlPanelProps = {
+  activeStats: SegmentStats;
+  errorMessage: string | null;
+  hasAnyRoute: boolean;
+  savedSegments: SavedSegment[];
+  signalMessage: string | null;
+  status: AppStatus;
   panelMode: PanelMode;
-  onAskPermission: () => void;
   onClear: () => void;
+  onDetails: () => void;
   onHide: () => void;
   onShow: () => void;
-  onShowDetails: () => void;
   onStart: () => void;
   onStop: () => void;
 };
@@ -32,34 +35,18 @@ function formatDistance(meters: number): string {
   return `${meters.toFixed(0)} m`;
 }
 
-function formatAccuracy(accuracy: number | null): string {
-  if (accuracy === null) {
-    return "--";
-  }
-
-  return `${accuracy.toFixed(0)} m`;
-}
-
-function getStatusLabel(status: AppStatus): string {
-  return status[0].toUpperCase() + status.slice(1);
-}
-
 export default function ControlPanel({
+  activeStats,
   errorMessage,
-  gpsAccuracy,
-  hasRoute,
-  permission,
-  pointsRecorded,
+  hasAnyRoute,
+  savedSegments,
   signalMessage,
   status,
-  straightDistanceMeters,
-  totalDistanceMeters,
   panelMode,
-  onAskPermission,
   onClear,
+  onDetails,
   onHide,
   onShow,
-  onShowDetails,
   onStart,
   onStop,
 }: ControlPanelProps) {
@@ -75,113 +62,101 @@ export default function ControlPanel({
     );
   }
 
-  const hasStats = hasRoute || gpsAccuracy !== null;
   const showStart = status !== "recording";
-  const shouldShowPermissionButton = permission !== "granted" && !hasRoute;
 
   return (
     <section className="rounded-[24px] border border-white/15 bg-slate-950/84 p-3 text-slate-50 shadow-2xl shadow-slate-950/35 backdrop-blur-xl">
-      <div className="flex items-center gap-2">
-        {showStart ? (
-          <button
-            className="flex-1 rounded-2xl bg-cyan-400 px-4 py-4 text-base font-semibold text-slate-950 transition active:scale-[0.99]"
-            type="button"
-            onClick={onStart}
-          >
-            Start Recording
-          </button>
-        ) : (
-          <button
-            className="flex-1 rounded-2xl bg-rose-400 px-4 py-4 text-base font-semibold text-slate-950 transition active:scale-[0.99]"
-            type="button"
-            onClick={onStop}
-          >
-            Stop Recording
-          </button>
-        )}
+      <p className="mb-3 text-center text-sm font-medium text-slate-200">
+        {showStart ? "Walk straight and start recording" : "Recording segment"}
+      </p>
 
-        {shouldShowPermissionButton ? (
-          <button
-            className="rounded-2xl border border-white/15 bg-white/6 px-4 py-4 text-sm font-semibold text-slate-50 transition active:scale-[0.99]"
-            type="button"
-            onClick={onAskPermission}
-          >
-            Enable GPS
-          </button>
-        ) : null}
+      <button
+        className={`w-full rounded-2xl px-4 py-4 text-base font-semibold transition active:scale-[0.99] ${
+          showStart ? "bg-cyan-400 text-slate-950" : "bg-rose-400 text-slate-950"
+        }`}
+        type="button"
+        onClick={showStart ? onStart : onStop}
+      >
+        {showStart ? "Start Recording" : "Stop"}
+      </button>
 
-        {(hasStats || errorMessage || signalMessage) && panelMode === "compact" ? (
+      {panelMode === "compact" && (savedSegments.length > 0 || errorMessage || signalMessage) ? (
+        <div className="mt-3 flex items-center justify-center gap-4 text-sm">
           <button
-            className="rounded-2xl border border-white/15 bg-white/6 px-4 py-4 text-sm font-semibold text-slate-50 transition active:scale-[0.99]"
+            className="text-cyan-200"
             type="button"
-            onClick={onShowDetails}
+            onClick={onDetails}
           >
             Details
           </button>
-        ) : null}
-      </div>
-
-      {panelMode === "compact" && hasStats ? (
-        <div className="mt-2 flex items-center gap-2">
-          <button
-            className="rounded-xl border border-white/15 bg-white/6 px-3 py-2 text-xs font-semibold text-slate-200"
-            type="button"
-            onClick={onHide}
-          >
-            Hide Panel
-          </button>
-          {hasRoute ? (
-            <button
-              className="rounded-xl border border-white/15 bg-white/6 px-3 py-2 text-xs font-semibold text-slate-200"
-              type="button"
-              onClick={onClear}
-            >
-              Clear Route
-            </button>
-          ) : null}
         </div>
       ) : null}
 
       {panelMode === "details" ? (
         <>
-          <div className="mt-3 flex items-start justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-semibold tracking-[0.22em] text-cyan-200 uppercase">
-                GPS Walk Tracker
-              </p>
-              <p className="mt-1 text-lg font-semibold text-slate-100">
-                Status: {getStatusLabel(status)}
-              </p>
-            </div>
+          <div className="mt-4 flex items-center justify-between">
+            <p className="text-[11px] font-semibold tracking-[0.22em] text-cyan-200 uppercase">
+              Segment Details
+            </p>
             <button
               className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300"
               type="button"
               onClick={onHide}
             >
-              Hide
+              Close
             </button>
           </div>
 
           <div className="mt-3 grid grid-cols-2 gap-3">
             <div className="rounded-2xl bg-white/6 p-3">
-              <p className="text-xs text-slate-300">Walked distance</p>
-              <p className="mt-1 text-2xl font-semibold">{formatDistance(totalDistanceMeters)}</p>
-            </div>
-            <div className="rounded-2xl bg-white/6 p-3">
-              <p className="text-xs text-slate-300">Straight distance</p>
+              <p className="text-xs text-slate-300">Current walked</p>
               <p className="mt-1 text-2xl font-semibold">
-                {formatDistance(straightDistanceMeters)}
+                {formatDistance(activeStats.totalDistanceMeters)}
               </p>
             </div>
             <div className="rounded-2xl bg-white/6 p-3">
-              <p className="text-xs text-slate-300">GPS accuracy</p>
-              <p className="mt-1 text-xl font-semibold">{formatAccuracy(gpsAccuracy)}</p>
-            </div>
-            <div className="rounded-2xl bg-white/6 p-3">
-              <p className="text-xs text-slate-300">Points recorded</p>
-              <p className="mt-1 text-xl font-semibold">{pointsRecorded}</p>
+              <p className="text-xs text-slate-300">Current straight</p>
+              <p className="mt-1 text-2xl font-semibold">
+                {formatDistance(activeStats.straightDistanceMeters)}
+              </p>
             </div>
           </div>
+
+          {savedSegments.length > 0 ? (
+            <div className="mt-3 rounded-2xl bg-white/6 p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-xs font-semibold tracking-[0.2em] text-cyan-200 uppercase">
+                  Saved Segments
+                </p>
+                <p className="text-xs text-slate-300">{savedSegments.length} total</p>
+              </div>
+              <div className="space-y-2">
+                {savedSegments.map((segment) => (
+                  <div
+                    key={segment.id}
+                    className="grid grid-cols-[1fr_auto_auto] items-center gap-3 rounded-xl border border-white/10 bg-slate-950/40 px-3 py-2"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-white">{segment.label}</p>
+                      <p className="text-xs text-slate-300">{segment.points.length} points</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-slate-300">Walked</p>
+                      <p className="text-sm font-semibold text-white">
+                        {formatDistance(segment.totalDistanceMeters)}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-slate-300">Straight</p>
+                      <p className="text-sm font-semibold text-white">
+                        {formatDistance(segment.straightDistanceMeters)}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           {signalMessage ? (
             <p className="mt-3 rounded-2xl border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-sm text-amber-100">
@@ -195,28 +170,17 @@ export default function ControlPanel({
             </p>
           ) : null}
 
-          <div className="mt-3 flex items-center gap-2">
-            {hasRoute ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {hasAnyRoute ? (
               <button
                 className="rounded-2xl border border-white/15 bg-white/6 px-4 py-3 text-sm font-semibold text-slate-50 transition active:scale-[0.99]"
                 type="button"
                 onClick={onClear}
               >
-                Clear
+                Clear All
               </button>
             ) : null}
-            <button
-              className="rounded-2xl border border-white/15 bg-white/6 px-4 py-3 text-sm font-semibold text-slate-50 transition active:scale-[0.99]"
-              type="button"
-              onClick={onShow}
-            >
-              Minimize
-            </button>
           </div>
-
-          <p className="mt-3 text-xs leading-5 text-slate-400">
-            Secure context required. Use localhost during development and HTTPS in production.
-          </p>
         </>
       ) : null}
     </section>

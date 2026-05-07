@@ -1,4 +1,4 @@
-import type { TrackPoint } from "@/lib/types";
+import type { SavedSegment, TrackPoint } from "@/lib/types";
 
 const EARTH_RADIUS_METERS = 6_371_000;
 
@@ -45,4 +45,11 @@ export function getStraightDistanceMeters(points: TrackPoint[]): number {
   }
 
   return getDistanceMeters(points[0], points[points.length - 1]);
+}
+
+export function getAllSegmentPoints(
+  segments: SavedSegment[],
+  currentPoints: TrackPoint[],
+): TrackPoint[] {
+  return [...segments.flatMap((segment) => segment.points), ...currentPoints];
 }

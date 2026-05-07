@@ -8,7 +8,14 @@ import {
   getStraightDistanceMeters,
   getTotalDistanceMeters,
 } from "@/lib/distance";
-import type { AppStatus, GeoPermission, PanelMode, TrackPoint } from "@/lib/types";
+import type {
+  AppStatus,
+  GeoPermission,
+  MapStyle,
+  PanelMode,
+  SavedSegment,
+  TrackPoint,
+} from "@/lib/types";
 
 const MapView = dynamic(() => import("@/components/MapView"), {
   ssr: false,
@@ -31,39 +38,47 @@ function positionToTrackPoint(position: GeolocationPosition): TrackPoint {
 
 export default function PathMeasureApp() {
   const [status, setStatus] = useState<AppStatus>("idle");
-  const [route, setRoute] = useState<TrackPoint[]>([]);
+  const [currentRoute, setCurrentRoute] = useState<TrackPoint[]>([]);
+  const [savedSegments, setSavedSegments] = useState<SavedSegment[]>([]);
   const [currentPoint, setCurrentPoint] = useState<TrackPoint | null>(null);
   const [permission, setPermission] = useState<GeoPermission>("unknown");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [signalMessage, setSignalMessage] = useState<string | null>(null);
   const [panelMode, setPanelMode] = useState<PanelMode>("compact");
   const [showPermissionPrompt, setShowPermissionPrompt] = useState(false);
+  const [mapStyle, setMapStyle] = useState<MapStyle>("street");
 
   const watchIdRef = useRef<number | null>(null);
   const pendingStartAfterPermissionRef = useRef(false);
-  const routeRef = useRef<TrackPoint[]>([]);
+  const currentRouteRef = useRef<TrackPoint[]>([]);
   const statusRef = useRef<AppStatus>("idle");
   const lastSavedAtRef = useRef<number>(0);
 
-  const totalDistance = getTotalDistanceMeters(route);
-  const straightDistance = getStraightDistanceMeters(route);
-  const lastAccuracy = currentPoint?.accuracy ?? null;
+  const activeTotalDistance = getTotalDistanceMeters(currentRoute);
+  const activeStraightDistance = getStraightDistanceMeters(currentRoute);
+  const displayedTotalDistance =
+    status === "recording"
+      ? activeTotalDistance
+      : savedSegments[savedSegments.length - 1]?.totalDistanceMeters ?? 0;
+  const displayedStraightDistance =
+    status === "recording"
+      ? activeStraightDistance
+      : savedSegments[savedSegments.length - 1]?.straightDistanceMeters ?? 0;
+  const hasAnyRoute = savedSegments.length > 0 || currentRoute.length > 0;
 
   useEffect(() => {
-    routeRef.current = route;
-  }, [route]);
+    currentRouteRef.current = currentRoute;
+  }, [currentRoute]);
 
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
 
   useEffect(() => {
-    if (status === "recording" || route.length > 0) {
-      setPanelMode((currentMode) =>
-        currentMode === "hidden" ? "hidden" : "details",
-      );
+    if ("geolocation" in navigator && permission === "unknown" && currentPoint === null) {
+      setShowPermissionPrompt(true);
     }
-  }, [route.length, status]);
+  }, [currentPoint, permission]);
 
   const stopGeolocationWatch = useEffectEvent(() => {
     if (watchIdRef.current !== null) {
@@ -95,11 +110,11 @@ export default function PathMeasureApp() {
         return;
       }
 
-      const lastSavedPoint = routeRef.current[routeRef.current.length - 1];
+      const lastSavedPoint = currentRouteRef.current[currentRouteRef.current.length - 1];
       if (!lastSavedPoint) {
         lastSavedAtRef.current = nextPoint.timestamp;
         setSignalMessage(null);
-        setRoute([nextPoint]);
+        setCurrentRoute([nextPoint]);
         return;
       }
 
@@ -118,7 +133,7 @@ export default function PathMeasureApp() {
 
       lastSavedAtRef.current = nextPoint.timestamp;
       setSignalMessage(null);
-      setRoute((currentRoute) => [...currentRoute, nextPoint]);
+      setCurrentRoute((points) => [...points, nextPoint]);
     },
   );
 
@@ -143,7 +158,7 @@ export default function PathMeasureApp() {
 
     if (statusRef.current === "recording") {
       stopGeolocationWatch();
-      setStatus(routeRef.current.length > 0 ? "stopped" : "idle");
+      setStatus(currentRouteRef.current.length > 0 ? "stopped" : "idle");
     }
   });
 
@@ -178,6 +193,7 @@ export default function PathMeasureApp() {
       return;
     }
 
+    pendingStartAfterPermissionRef.current = false;
     setShowPermissionPrompt(true);
     setErrorMessage(null);
   });
@@ -188,7 +204,7 @@ export default function PathMeasureApp() {
       return;
     }
 
-    if (permission !== "granted" && currentPoint === null) {
+    if (permission !== "granted") {
       pendingStartAfterPermissionRef.current = true;
       setShowPermissionPrompt(true);
       return;
@@ -196,13 +212,13 @@ export default function PathMeasureApp() {
 
     pendingStartAfterPermissionRef.current = false;
     stopGeolocationWatch();
-    routeRef.current = [];
+    currentRouteRef.current = [];
     lastSavedAtRef.current = 0;
-    setRoute([]);
+    setCurrentRoute([]);
     setStatus("recording");
     setErrorMessage(null);
     setSignalMessage("Waiting for a strong GPS fix...");
-    setPanelMode("details");
+    setPanelMode("compact");
     setShowPermissionPrompt(false);
 
     watchIdRef.current = navigator.geolocation.watchPosition(
@@ -219,15 +235,40 @@ export default function PathMeasureApp() {
   const stopRecording = useEffectEvent(() => {
     stopGeolocationWatch();
     setSignalMessage(null);
-    setStatus(routeRef.current.length > 0 ? "stopped" : "idle");
+
+    if (currentRouteRef.current.length > 0) {
+      const segmentIndex = savedSegments.length + 1;
+      const nextSegment: SavedSegment = {
+        id: `segment-${Date.now()}`,
+        label: `Segment ${segmentIndex}`,
+        points: currentRouteRef.current,
+        totalDistanceMeters: getTotalDistanceMeters(currentRouteRef.current),
+        straightDistanceMeters: getStraightDistanceMeters(currentRouteRef.current),
+        lastAccuracy: currentPoint?.accuracy ?? null,
+      };
+
+      setSavedSegments((segments) => [...segments, nextSegment]);
+      currentRouteRef.current = [];
+      setCurrentRoute([]);
+      setStatus("stopped");
+      setPanelMode("details");
+      return;
+    }
+
+    setStatus("stopped");
+    setErrorMessage(
+      "No reliable GPS points were saved for this segment yet. Wait for the route to appear before stopping.",
+    );
+    setPanelMode("details");
   });
 
-  const clearRoute = useEffectEvent(() => {
+  const clearAllRoutes = useEffectEvent(() => {
     stopGeolocationWatch();
     pendingStartAfterPermissionRef.current = false;
-    routeRef.current = [];
+    currentRouteRef.current = [];
     lastSavedAtRef.current = 0;
-    setRoute([]);
+    setCurrentRoute([]);
+    setSavedSegments([]);
     setStatus("idle");
     setSignalMessage(null);
     setErrorMessage(null);
@@ -240,16 +281,30 @@ export default function PathMeasureApp() {
       <MapView
         center={INITIAL_MAP_CENTER}
         currentPoint={currentPoint}
-        gpsAccuracy={lastAccuracy}
-        route={route}
-        straightDistanceMeters={straightDistance}
+        currentRoute={currentRoute}
+        mapStyle={mapStyle}
+        savedSegments={savedSegments}
+        straightDistanceMeters={displayedStraightDistance}
         status={status}
-        totalDistanceMeters={totalDistance}
+        totalDistanceMeters={displayedTotalDistance}
       />
 
       <div className="pointer-events-none absolute inset-x-0 top-0 z-[500] p-4">
-        <div className="inline-flex rounded-full border border-white/20 bg-slate-950/75 px-3 py-1 text-xs font-medium tracking-[0.24em] text-cyan-200 uppercase backdrop-blur">
-          PathMeasure
+        <div className="flex items-center justify-between gap-3">
+          <div className="inline-flex rounded-full border border-white/20 bg-slate-950/75 px-3 py-1 text-xs font-medium tracking-[0.24em] text-cyan-200 uppercase backdrop-blur">
+            PathMeasure
+          </div>
+          <button
+            className="pointer-events-auto rounded-full border border-white/20 bg-slate-950/75 px-4 py-2 text-xs font-semibold text-slate-100 backdrop-blur"
+            type="button"
+            onClick={() =>
+              setMapStyle((currentStyle) =>
+                currentStyle === "street" ? "satellite" : "street",
+              )
+            }
+          >
+            {mapStyle === "street" ? "Satellite" : "Map"}
+          </button>
         </div>
       </div>
 
@@ -279,7 +334,7 @@ export default function PathMeasureApp() {
                 type="button"
                 onClick={requestSingleLocationFix}
               >
-                Continue
+                Turn GPS On
               </button>
             </div>
           </div>
@@ -289,21 +344,20 @@ export default function PathMeasureApp() {
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[500] p-3 pb-[calc(env(safe-area-inset-bottom)+12px)] sm:p-4">
         <div className="pointer-events-auto mx-auto w-full max-w-md">
           <ControlPanel
+            activeStats={{
+              straightDistanceMeters: displayedStraightDistance,
+              totalDistanceMeters: displayedTotalDistance,
+            }}
             errorMessage={errorMessage}
-            gpsAccuracy={lastAccuracy}
-            hasRoute={route.length > 0}
+            hasAnyRoute={hasAnyRoute}
             panelMode={panelMode}
-            permission={permission}
-            pointsRecorded={route.length}
+            savedSegments={savedSegments}
             signalMessage={signalMessage}
             status={status}
-            straightDistanceMeters={straightDistance}
-            totalDistanceMeters={totalDistance}
-            onAskPermission={openPermissionPrompt}
-            onClear={clearRoute}
-            onHide={() => setPanelMode("hidden")}
+            onClear={clearAllRoutes}
+            onDetails={() => setPanelMode("details")}
+            onHide={() => setPanelMode("compact")}
             onShow={() => setPanelMode("compact")}
-            onShowDetails={() => setPanelMode("details")}
             onStart={startRecording}
             onStop={stopRecording}
           />
