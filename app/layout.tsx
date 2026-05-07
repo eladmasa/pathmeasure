@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "PathMeasure",
-  description: "A simple GPS walking distance tracker for iPhone Safari.",
+  description: "Measure walking routes with GPS, save segments, and see distances directly on the map.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
