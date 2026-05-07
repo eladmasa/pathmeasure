@@ -8,9 +8,20 @@ import type { AppStatus, TrackPoint } from "@/lib/types";
 type MapViewProps = {
   center: [number, number];
   currentPoint: TrackPoint | null;
+  gpsAccuracy: number | null;
   route: TrackPoint[];
+  straightDistanceMeters: number;
   status: AppStatus;
+  totalDistanceMeters: number;
 };
+
+function formatDistance(meters: number): string {
+  if (meters >= 1000) {
+    return `${(meters / 1000).toFixed(2)} km`;
+  }
+
+  return `${meters.toFixed(0)} m`;
+}
 
 function MapController({
   currentPoint,
@@ -60,12 +71,16 @@ function MapController({
 export default function MapView({
   center,
   currentPoint,
+  gpsAccuracy,
   route,
+  straightDistanceMeters,
   status,
+  totalDistanceMeters,
 }: MapViewProps) {
   const routePositions = route.map(
     (point) => [point.latitude, point.longitude] as [number, number],
   );
+  const hasOverlayStats = route.length > 0 || gpsAccuracy !== null;
 
   return (
     <div className="h-full w-full">
@@ -133,6 +148,36 @@ export default function MapView({
           />
         ) : null}
       </MapContainer>
+
+      {hasOverlayStats ? (
+        <div className="pointer-events-none absolute inset-x-0 top-16 z-[450] flex justify-center px-4">
+          <div className="grid w-full max-w-sm grid-cols-2 gap-2">
+            <div className="rounded-2xl border border-white/15 bg-slate-950/78 px-3 py-2 text-white shadow-lg backdrop-blur">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-200">Walked</p>
+              <p className="mt-1 text-lg font-semibold">{formatDistance(totalDistanceMeters)}</p>
+            </div>
+            <div className="rounded-2xl border border-white/15 bg-slate-950/78 px-3 py-2 text-white shadow-lg backdrop-blur">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-200">Straight</p>
+              <p className="mt-1 text-lg font-semibold">
+                {formatDistance(straightDistanceMeters)}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/15 bg-slate-950/78 px-3 py-2 text-white shadow-lg backdrop-blur">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-200">Accuracy</p>
+              <p className="mt-1 text-lg font-semibold">
+                {gpsAccuracy === null ? "--" : `${gpsAccuracy.toFixed(0)} m`}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/15 bg-slate-950/78 px-3 py-2 text-white shadow-lg backdrop-blur">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-200">Status</p>
+              <p className="mt-1 text-lg font-semibold">
+                {status[0].toUpperCase()}
+                {status.slice(1)}
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -8,3 +8,5 @@ export type TrackPoint = {
   accuracy: number;
   timestamp: number;
 };
+
+export type PanelMode = "compact" | "details" | "hidden";
