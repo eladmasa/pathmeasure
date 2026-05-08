@@ -13,6 +13,8 @@ export type PanelMode = "compact" | "details" | "hidden";
 
 export type MapStyle = "street" | "satellite";
 
+export type UnitSystem = "metric" | "us";
+
 export type SavedSegment = {
   id: string;
   label: string;

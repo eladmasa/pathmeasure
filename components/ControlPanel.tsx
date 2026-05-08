@@ -4,7 +4,9 @@ import type {
   AppStatus,
   PanelMode,
   SavedSegment,
+  UnitSystem,
 } from "@/lib/types";
+import { formatDistance } from "@/lib/distance";
 
 type SegmentStats = {
   straightDistanceMeters: number;
@@ -19,6 +21,7 @@ type ControlPanelProps = {
   signalMessage: string | null;
   status: AppStatus;
   panelMode: PanelMode;
+  unitSystem: UnitSystem;
   onClear: () => void;
   onDetails: () => void;
   onHide: () => void;
@@ -26,14 +29,6 @@ type ControlPanelProps = {
   onStart: () => void;
   onStop: () => void;
 };
-
-function formatDistance(meters: number): string {
-  if (meters >= 1000) {
-    return `${(meters / 1000).toFixed(2)} km`;
-  }
-
-  return `${meters.toFixed(0)} m`;
-}
 
 export default function ControlPanel({
   activeStats,
@@ -43,6 +38,7 @@ export default function ControlPanel({
   signalMessage,
   status,
   panelMode,
+  unitSystem,
   onClear,
   onDetails,
   onHide,
@@ -111,13 +107,13 @@ export default function ControlPanel({
             <div className="rounded-2xl bg-white/6 p-3">
               <p className="text-xs text-slate-300">Current walked</p>
               <p className="mt-1 text-2xl font-semibold">
-                {formatDistance(activeStats.totalDistanceMeters)}
+                {formatDistance(activeStats.totalDistanceMeters, unitSystem)}
               </p>
             </div>
             <div className="rounded-2xl bg-white/6 p-3">
               <p className="text-xs text-slate-300">Current straight</p>
               <p className="mt-1 text-2xl font-semibold">
-                {formatDistance(activeStats.straightDistanceMeters)}
+                {formatDistance(activeStats.straightDistanceMeters, unitSystem)}
               </p>
             </div>
           </div>
@@ -143,13 +139,13 @@ export default function ControlPanel({
                     <div className="text-right">
                       <p className="text-xs text-slate-300">Walked</p>
                       <p className="text-sm font-semibold text-white">
-                        {formatDistance(segment.totalDistanceMeters)}
+                        {formatDistance(segment.totalDistanceMeters, unitSystem)}
                       </p>
                     </div>
                     <div className="text-right">
                       <p className="text-xs text-slate-300">Straight</p>
                       <p className="text-sm font-semibold text-white">
-                        {formatDistance(segment.straightDistanceMeters)}
+                        {formatDistance(segment.straightDistanceMeters, unitSystem)}
                       </p>
                     </div>
                   </div>

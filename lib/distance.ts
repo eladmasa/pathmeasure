@@ -1,4 +1,4 @@
-import type { SavedSegment, TrackPoint } from "@/lib/types";
+import type { SavedSegment, TrackPoint, UnitSystem } from "@/lib/types";
 
 const EARTH_RADIUS_METERS = 6_371_000;
 
@@ -45,6 +45,26 @@ export function getStraightDistanceMeters(points: TrackPoint[]): number {
   }
 
   return getDistanceMeters(points[0], points[points.length - 1]);
+}
+
+export function formatDistance(
+  meters: number,
+  unitSystem: UnitSystem,
+): string {
+  if (unitSystem === "us") {
+    const feet = meters * 3.28084;
+    if (feet >= 5280) {
+      return `${(feet / 5280).toFixed(2)} mi`;
+    }
+
+    return `${feet.toFixed(0)} ft`;
+  }
+
+  if (meters >= 1000) {
+    return `${(meters / 1000).toFixed(2)} km`;
+  }
+
+  return `${meters.toFixed(0)} m`;
 }
 
 export function getAllSegmentPoints(

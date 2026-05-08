@@ -15,6 +15,7 @@ import type {
   PanelMode,
   SavedSegment,
   TrackPoint,
+  UnitSystem,
 } from "@/lib/types";
 
 const MapView = dynamic(() => import("@/components/MapView"), {
@@ -47,6 +48,7 @@ export default function PathMeasureApp() {
   const [panelMode, setPanelMode] = useState<PanelMode>("compact");
   const [showPermissionPrompt, setShowPermissionPrompt] = useState(false);
   const [mapStyle, setMapStyle] = useState<MapStyle>("street");
+  const [unitSystem, setUnitSystem] = useState<UnitSystem>("metric");
 
   const watchIdRef = useRef<number | null>(null);
   const pendingStartAfterPermissionRef = useRef(false);
@@ -287,6 +289,7 @@ export default function PathMeasureApp() {
         straightDistanceMeters={displayedStraightDistance}
         status={status}
         totalDistanceMeters={displayedTotalDistance}
+        unitSystem={unitSystem}
       />
 
       <div className="pointer-events-none absolute inset-x-0 top-0 z-[500] p-4">
@@ -294,17 +297,30 @@ export default function PathMeasureApp() {
           <div className="inline-flex rounded-full border border-white/20 bg-slate-950/75 px-3 py-1 text-xs font-medium tracking-[0.24em] text-cyan-200 uppercase backdrop-blur">
             PathMeasure
           </div>
-          <button
-            className="pointer-events-auto rounded-full border border-white/20 bg-slate-950/75 px-4 py-2 text-xs font-semibold text-slate-100 backdrop-blur"
-            type="button"
-            onClick={() =>
-              setMapStyle((currentStyle) =>
-                currentStyle === "street" ? "satellite" : "street",
-              )
-            }
-          >
-            {mapStyle === "street" ? "Satellite" : "Map"}
-          </button>
+          <div className="pointer-events-auto flex items-center gap-2">
+            <button
+              className="rounded-full border border-white/20 bg-slate-950/75 px-4 py-2 text-xs font-semibold text-slate-100 backdrop-blur"
+              type="button"
+              onClick={() =>
+                setUnitSystem((currentSystem) =>
+                  currentSystem === "metric" ? "us" : "metric",
+                )
+              }
+            >
+              {unitSystem === "metric" ? "US" : "Metric"}
+            </button>
+            <button
+              className="rounded-full border border-white/20 bg-slate-950/75 px-4 py-2 text-xs font-semibold text-slate-100 backdrop-blur"
+              type="button"
+              onClick={() =>
+                setMapStyle((currentStyle) =>
+                  currentStyle === "street" ? "satellite" : "street",
+                )
+              }
+            >
+              {mapStyle === "street" ? "Satellite" : "Map"}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -354,6 +370,7 @@ export default function PathMeasureApp() {
             savedSegments={savedSegments}
             signalMessage={signalMessage}
             status={status}
+            unitSystem={unitSystem}
             onClear={clearAllRoutes}
             onDetails={() => setPanelMode("details")}
             onHide={() => setPanelMode("compact")}

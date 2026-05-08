@@ -12,8 +12,14 @@ import {
   useMap,
 } from "react-leaflet";
 
-import { getDistanceMeters } from "@/lib/distance";
-import type { AppStatus, MapStyle, SavedSegment, TrackPoint } from "@/lib/types";
+import { formatDistance, getDistanceMeters } from "@/lib/distance";
+import type {
+  AppStatus,
+  MapStyle,
+  SavedSegment,
+  TrackPoint,
+  UnitSystem,
+} from "@/lib/types";
 
 type MapViewProps = {
   center: [number, number];
@@ -24,17 +30,10 @@ type MapViewProps = {
   straightDistanceMeters: number;
   status: AppStatus;
   totalDistanceMeters: number;
+  unitSystem: UnitSystem;
 };
 
 const SEGMENT_COLORS = ["#22d3ee", "#34d399", "#f59e0b", "#f472b6", "#a78bfa", "#fb7185"];
-
-function formatDistance(meters: number): string {
-  if (meters >= 1000) {
-    return `${(meters / 1000).toFixed(2)} km`;
-  }
-
-  return `${meters.toFixed(0)} m`;
-}
 
 function getSegmentLabelPoint(points: TrackPoint[]): [number, number] | null {
   if (points.length === 0) {
@@ -80,7 +79,7 @@ function getSegmentLabelPoint(points: TrackPoint[]): [number, number] | null {
   return [lastPoint.latitude, lastPoint.longitude];
 }
 
-function createDistanceIcon(distanceMeters: number) {
+function createDistanceIcon(distanceMeters: number, unitSystem: UnitSystem) {
   return L.divIcon({
     className: "",
     html: `
@@ -96,7 +95,7 @@ function createDistanceIcon(distanceMeters: number) {
         white-space: nowrap;
         backdrop-filter: blur(8px);
       ">
-        ${formatDistance(distanceMeters)}
+        ${formatDistance(distanceMeters, unitSystem)}
       </div>
     `,
     iconAnchor: [0, 0],
@@ -162,6 +161,7 @@ export default function MapView({
   straightDistanceMeters,
   status,
   totalDistanceMeters,
+  unitSystem,
 }: MapViewProps) {
   const currentRoutePositions = currentRoute.map(
     (point) => [point.latitude, point.longitude] as [number, number],
@@ -225,7 +225,7 @@ export default function MapView({
               {labelPoint ? (
                 <Marker
                   key={`${segment.id}-label`}
-                  icon={createDistanceIcon(segment.totalDistanceMeters)}
+                  icon={createDistanceIcon(segment.totalDistanceMeters, unitSystem)}
                   interactive={false}
                   position={labelPoint}
                 />
@@ -292,12 +292,14 @@ export default function MapView({
             <div className="rounded-2xl border border-white/15 bg-slate-950/78 px-3 py-2 text-white shadow-lg backdrop-blur">
               <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-200">Straight</p>
               <p className="mt-1 text-lg font-semibold">
-                {formatDistance(straightDistanceMeters)}
+                {formatDistance(straightDistanceMeters, unitSystem)}
               </p>
             </div>
             <div className="rounded-2xl border border-white/15 bg-slate-950/78 px-3 py-2 text-white shadow-lg backdrop-blur">
               <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-200">Walked</p>
-              <p className="mt-1 text-lg font-semibold">{formatDistance(totalDistanceMeters)}</p>
+              <p className="mt-1 text-lg font-semibold">
+                {formatDistance(totalDistanceMeters, unitSystem)}
+              </p>
             </div>
             {waitingForGps ? (
               <div className="col-span-2 rounded-2xl border border-amber-300/20 bg-slate-950/78 px-3 py-2 text-center text-sm text-amber-100 shadow-lg backdrop-blur">
